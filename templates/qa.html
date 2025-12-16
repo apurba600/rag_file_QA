@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Q&A</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Ask Questions About Your Document</h1>
+        
+        <div class="chat-container">
+            <div id="chat-messages" class="chat-messages"></div>
+            
+            <div class="input-area">
+                <input type="text" id="question-input" placeholder="Ask a question about the document..." autocomplete="off">
+                <button id="ask-button">Ask</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const questionInput = document.getElementById('question-input');
+        const askButton = document.getElementById('ask-button');
+
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            messageDiv.textContent = content;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function askQuestion() {
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            // Add user's question to chat
+            addMessage(question, true);
+            questionInput.value = '';
+            questionInput.disabled = true;
+            askButton.disabled = true;
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addMessage(data.answer);
+                    
+                    // Show sources if available
+                    if (data.sources && data.sources.length > 0) {
+                        const sources = data.sources.map(s => 
+                            `Page ${s.page || 'N/A'}: ${s.source || 'Unknown source'}`
+                        ).join('\n');
+                        addMessage(`Sources:\n${sources}`);
+                    }
+                } else {
+                    addMessage(`Error: ${data.error || 'Unknown error occurred'}`);
+                }
+            } catch (error) {
+                addMessage('Error connecting to the server. Please try again.');
+                console.error('Error:', error);
+            }
+
+            questionInput.disabled = false;
+            askButton.disabled = false;
+            questionInput.focus();
+        }
+
+        // Event listeners
+        askButton.addEventListener('click', askQuestion);
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') askQuestion();
+        });
+    </script>
+</body>
+</html>
