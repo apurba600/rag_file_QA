@@ -3,36 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Q&A</title>
+    <title>Cosmic Document Q&A</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#0a0e23">
 </head>
 <body>
+    <!-- Starry background elements -->
+    <div class="stars">
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+    </div>
+
     <div class="container">
-        <h1>Ask Questions About Your Document</h1>
+        <h1><i class="fas fa-star"></i> Cosmic Document Q&A <i class="fas fa-rocket"></i></h1>
         
         <div class="chat-container">
-            <div id="chat-messages" class="chat-messages"></div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="welcome-message">
+                    <p>Welcome to your cosmic document assistant! 🌌</p>
+                    <p>Ask anything about your uploaded documents and explore the knowledge within.</p>
+                </div>
+            </div>
             
             <div class="input-area">
-                <input type="text" id="question-input" placeholder="Ask a question about the document..." autocomplete="off">
-                <button id="ask-button">Ask</button>
+                <div class="input-wrapper">
+                    <input type="text" id="question-input" placeholder="Ask a question about the document..." autocomplete="off">
+                    <div id="typing-indicator" class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+                <button id="ask-button">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
             </div>
         </div>
     </div>
 
     <script>
+        // DOM Elements
         const chatMessages = document.getElementById('chat-messages');
         const questionInput = document.getElementById('question-input');
         const askButton = document.getElementById('ask-button');
+        const typingIndicator = document.getElementById('typing-indicator');
 
+        // Add message to chat
         function addMessage(content, isUser = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-            messageDiv.textContent = content;
+            
+            // Format message with line breaks and markdown-like syntax
+            const formattedContent = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+                .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
+                .replace(/\n/g, '<br>') // Line breaks
+                .replace(/`([^`]+)`/g, '<code>$1</code>'); // Inline code
+            
+            messageDiv.innerHTML = formattedContent;
+            
+            // Add timestamp
+            const timestamp = document.createElement('div');
+            timestamp.className = 'message-time';
+            timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            messageDiv.appendChild(timestamp);
+            
             chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // Add animation class
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideIn 0.3s ease-out forwards';
+            }, 10);
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            typingIndicator.style.display = 'flex';
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        // Hide typing indicator
+        function hideTypingIndicator() {
+            typingIndicator.style.display = 'none';
+        }
+
+        // Process and send question
         async function askQuestion() {
             const question = questionInput.value.trim();
             if (!question) return;
@@ -42,6 +106,9 @@
             questionInput.value = '';
             questionInput.disabled = true;
             askButton.disabled = true;
+            
+            // Show typing indicator
+            showTypingIndicator();
 
             try {
                 const response = await fetch('/ask', {
@@ -54,21 +121,50 @@
 
                 const data = await response.json();
                 
+                // Hide typing indicator before showing response
+                hideTypingIndicator();
+                
                 if (response.ok) {
-                    addMessage(data.answer);
+                    // Split response into chunks for streaming effect
+                    const answer = data.answer;
+                    let i = 0;
+                    const chunkSize = 5;
                     
-                    // Show sources if available
-                    if (data.sources && data.sources.length > 0) {
-                        const sources = data.sources.map(s => 
-                            `Page ${s.page || 'N/A'}: ${s.source || 'Unknown source'}`
-                        ).join('\n');
-                        addMessage(`Sources:\n${sources}`);
+                    function addChunk() {
+                        if (i < answer.length) {
+                            const chunk = answer.substring(i, i + chunkSize);
+                            const isFirstChunk = i === 0;
+                            
+                            if (isFirstChunk) {
+                                addMessage(chunk);
+                            } else {
+                                const lastMessage = chatMessages.lastChild;
+                                lastMessage.textContent += chunk;
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                            
+                            i += chunkSize;
+                            setTimeout(addChunk, 30); // Adjust speed of typing effect
+                        } else if (data.sources && data.sources.length > 0) {
+                            // Show sources after message is complete
+                            const sources = data.sources.map(s => 
+                                `📄 Page ${s.page || 'N/A'}: ${s.source || 'Unknown source'}`
+                            ).join('\n');
+                            
+                            // Small delay before showing sources
+                            setTimeout(() => {
+                                addMessage(`🔍 Sources:\n${sources}`);
+                            }, 200);
+                        }
                     }
+                    
+                    addChunk();
                 } else {
-                    addMessage(`Error: ${data.error || 'Unknown error occurred'}`);
+                    addMessage(`❌ Error: ${data.error || 'Unknown error occurred'}`);
                 }
             } catch (error) {
-                addMessage('Error connecting to the server. Please try again.');
+                hideTypingIndicator();
+                addMessage('🚨 Error connecting to the server. Please try again.');
                 console.error('Error:', error);
             }
 
@@ -77,10 +173,85 @@
             questionInput.focus();
         }
 
+        // Add animation to input on focus
+        questionInput.addEventListener('focus', () => {
+            questionInput.parentElement.classList.add('focused');
+        });
+
+        questionInput.addEventListener('blur', () => {
+            questionInput.parentElement.classList.remove('focused');
+        });
+
+        // Handle form submission
+        function handleSubmit(e) {
+            e.preventDefault();
+            askQuestion();
+        }
+
         // Event listeners
-        askButton.addEventListener('click', askQuestion);
+        askButton.addEventListener('click', handleSubmit);
         questionInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') askQuestion();
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+            }
+        });
+
+        // Add floating animation to the header
+        const header = document.querySelector('h1');
+        function floatAnimation() {
+            header.style.transform = `translateY(${Math.sin(Date.now() / 1000) * 5}px)`;
+            requestAnimationFrame(floatAnimation);
+        }
+        floatAnimation();
+
+        // Add some interactive stars
+        function createStar() {
+            const star = document.createElement('div');
+            star.className = 'floating-star';
+            star.style.left = Math.random() * 100 + 'vw';
+            star.style.top = Math.random() * 100 + 'vh';
+            star.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            document.body.appendChild(star);
+            
+            // Remove star after animation completes
+            setTimeout(() => {
+                star.remove();
+            }, 5000);
+        }
+
+        // Create some initial stars
+        for (let i = 0; i < 10; i++) {
+            setTimeout(createStar, i * 300);
+        }
+
+        // Create new stars periodically
+        setInterval(createStar, 1000);
+    </script>
+    <script>
+        // Add confetti effect on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Simple confetti effect
+            const colors = ['#4a90e2', '#6a5acd', '#9b59b6', '#e74c3c', '#f1c40f'];
+            
+            function createConfetti() {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                document.body.appendChild(confetti);
+                
+                // Remove confetti after animation
+                setTimeout(() => {
+                    confetti.remove();
+                }, 5000);
+            }
+            
+            // Initial confetti
+            for (let i = 0; i < 50; i++) {
+                setTimeout(createConfetti, i * 100);
+            }
         });
     </script>
 </body>
