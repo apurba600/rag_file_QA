@@ -1,3 +1,4 @@
+from pyexpat import model
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import os
 from reliable_rag import encode_pdf, get_retriever
@@ -40,7 +41,10 @@ def upload_file():
             vectorstore = encode_pdf(filepath)
             retriever = get_retriever(vectorstore)
             qa_chain = RetrievalQA.from_chain_type(
-                llm=ChatOpenAI(temperature=0),
+                llm=ChatOpenAI(
+                    temperature=0,
+                    model="gpt-4o-mini"
+                ),
                 chain_type="stuff",
                 retriever=retriever,
                 return_source_documents=True
@@ -75,7 +79,6 @@ def ask_question():
         result = qa_chain({"query": question})
         return jsonify({
             'answer': result['result'],
-            'sources': [doc.metadata for doc in result.get('source_documents', [])]
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -61,6 +61,10 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
             
+            // Create a container for the message content
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            
             // Format message with line breaks and markdown-like syntax
             const formattedContent = content
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
@@ -68,12 +72,15 @@
                 .replace(/\n/g, '<br>') // Line breaks
                 .replace(/`([^`]+)`/g, '<code>$1</code>'); // Inline code
             
-            messageDiv.innerHTML = formattedContent;
+            messageContent.innerHTML = formattedContent;
+            messageDiv.appendChild(messageContent);
             
             // Add timestamp
             const timestamp = document.createElement('div');
             timestamp.className = 'message-time';
             timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            // Add timestamp to message div
             messageDiv.appendChild(timestamp);
             
             chatMessages.appendChild(messageDiv);
@@ -136,11 +143,34 @@
                             const isFirstChunk = i === 0;
                             
                             if (isFirstChunk) {
-                                addMessage(chunk);
+                                // For the first chunk, create a new message
+                                const messageDiv = document.createElement('div');
+                                messageDiv.className = 'message bot-message';
+                                
+                                // Create message content container
+                                const messageContent = document.createElement('div');
+                                messageContent.className = 'message-content';
+                                messageContent.textContent = chunk;
+                                
+                                // Add timestamp
+                                const timestamp = document.createElement('div');
+                                timestamp.className = 'message-time';
+                                timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                
+                                // Assemble the message
+                                messageDiv.appendChild(messageContent);
+                                messageDiv.appendChild(timestamp);
+                                chatMessages.appendChild(messageDiv);
+                                
+                                // Store reference to the content element for updates
+                                messageDiv._contentElement = messageContent;
                             } else {
+                                // For subsequent chunks, update the content of the last message
                                 const lastMessage = chatMessages.lastChild;
-                                lastMessage.textContent += chunk;
-                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                                if (lastMessage && lastMessage._contentElement) {
+                                    lastMessage._contentElement.textContent += chunk;
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
                             }
                             
                             i += chunkSize;

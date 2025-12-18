@@ -1,6 +1,4 @@
 
-# Import libraries
-import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -9,55 +7,76 @@ from helper_functions import (
     replace_t_with_space,
     get_langchain_embedding_provider
 )
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
 
-def encode_pdf(pdf_path, chunk_size=1000, chunk_overlap=200):
-    """
-    Encodes a PDF file into a vector store using OpenAI embeddings.
+def encode_pdf(path, chunk_size=500, chunk_overlap=100):
+    loader = PyPDFLoader(path)
+    documents = loader.load()
 
-    Args:
-        pdf_path: The path to the PDF file to process.
-        chunk_size: The desired size of each text chunk (default: 1000).
-        chunk_overlap: The amount of overlap between consecutive chunks (default: 200).
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len
+    )
 
-    Returns:
-        A FAISS vector store containing the encoded document content.
-    """
-    try:
-        # Load PDF document
-        loader = PyPDFLoader(pdf_path)
-        documents = loader.load()
+    docs = splitter.split_documents(documents)
+    cleaned_docs = replace_t_with_space(docs)
 
-        # Split documents into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            length_function=len
+    embeddings = get_langchain_embedding_provider(
+        EmbeddingProvider.OPENAI
+    )
+
+    vectorstore = FAISS.from_documents(
+        cleaned_docs,
+        embeddings
+    )
+
+    return vectorstore
+
+def get_retriever(vectorstore, k=4):
+    return vectorstore.as_retriever(
+        search_kwargs={"k": k}
+    )
+
+def answer_with_llm(retriever, question):
+    # Retrieve docs
+    retrieved_docs = retriever.invoke(question)
+
+    # 🔹 ADD THIS PART
+    retrieved_docs_content = [
+        r_doc.page_content for r_doc in retrieved_docs
+    ]
+
+    # Build context
+    context = "\n\n".join(retrieved_docs_content)
+
+    # LLM
+    llm = ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=0
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a helpful assistant. Answer the question ONLY using the provided context. "
+            "If the answer is not in the context, say you don't know."
+            "If the question asks for an account number, return ONLY the number."
+            "Do NOT include timestamps, prefixes, or extra words."
+            "If the answer is not present, say 'I don't know'."
+        ),
+        (
+            "human",
+            "Context:\n{context}\n\nQuestion:\n{question}"
         )
-        
-        texts = text_splitter.split_documents(documents)
-        cleaned_texts = replace_t_with_space(texts)
+    ])
 
-        # Create embeddings
-        embeddings = get_langchain_embedding_provider(EmbeddingProvider.OPENAI)
+    response = llm.invoke(
+        prompt.format(
+            context=context,
+            question=question
+        )
+    )
 
-        # Create and return vector store
-        vectorstore = FAISS.from_documents(cleaned_texts, embeddings)
-        return vectorstore
-        
-    except Exception as e:
-        raise Exception(f"Error processing PDF: {str(e)}")
-
-def get_retriever(vectorstore, k=2):
-    """
-    Creates a retriever from a vector store.
-    
-    Args:
-        vectorstore: The vector store to create a retriever from.
-        k: Number of documents to return (default: 2).
-        
-    Returns:
-        A retriever object.
-    """
-    return vectorstore.as_retriever(search_kwargs={"k": k})
-
-
+    return response.content
